@@ -370,6 +370,7 @@ private fun EditorScreen(
     var musicVolume by remember { mutableFloatStateOf(0.75f) }
     var musicFadeInMs by remember { mutableFloatStateOf(0f) }
     var rotation by remember { mutableFloatStateOf(0f) }
+    var zoom by remember { mutableFloatStateOf(1f) }
     var overlayText by remember { mutableStateOf("") }
     var overlayTextSize by remember { mutableFloatStateOf(22f) }
     var overlayTextColor by remember { mutableStateOf("White") }
@@ -385,9 +386,9 @@ private fun EditorScreen(
     var exportMessage by remember { mutableStateOf<String?>(null) }
 
     val previewEffects = remember(
-        filterPreset, brightness, contrast, saturation, rotation, aspectPreset, exportResolution
+        filterPreset, brightness, contrast, saturation, rotation, zoom, aspectPreset, exportResolution
     ) {
-        buildVisualEffects(filterPreset, brightness, contrast, saturation, rotation, aspectPreset, exportResolution)
+        buildVisualEffects(filterPreset, brightness, contrast, saturation, rotation, zoom, aspectPreset, exportResolution)
     }
 
     SideEffect {
@@ -1034,9 +1035,11 @@ private fun EditorScreen(
                         Text(rotation.roundToInt().toString() + "°", color = Accent, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.weight(1f))
                         TextButton(onClick = { rotation = (rotation + 90f) % 360f }) { Text("Rotate 90°", color = Accent) }
-                        TextButton(onClick = { rotation = 0f }) { Text("Reset", color = Color.White) }
+                        TextButton(onClick = { rotation = 0f; zoom = 1f }) { Text("Reset", color = Color.White) }
                     }
-                    Text("Aspect ratio, resolution and rotation are applied during export.", color = Muted, fontSize = 10.sp)
+                    Text("Zoom  " + String.format(Locale.US, "%.2fx", zoom), color = Muted, fontSize = 10.sp)
+                    Slider(value = zoom, onValueChange = { zoom = it }, valueRange = 1f..2.5f)
+                    Text("Aspect ratio, zoom, resolution and rotation are applied during preview and export.", color = Muted, fontSize = 10.sp)
                 }
             }
         }
@@ -1136,6 +1139,7 @@ private fun buildVisualEffects(
     contrast: Float,
     saturation: Float,
     rotation: Float,
+    zoom: Float,
     aspectPreset: String,
     exportResolution: String
 ): MutableList<androidx.media3.common.Effect> {
@@ -1169,9 +1173,10 @@ private fun buildVisualEffects(
         effects.add(HslAdjustment.Builder().adjustSaturation(totalSaturation).build())
     }
 
-    if (rotation != 0f) {
+    if (rotation != 0f || zoom != 1f) {
         effects.add(
             ScaleAndRotateTransformation.Builder()
+                .setScale(zoom, zoom)
                 .setRotationDegrees(rotation)
                 .build()
         )
