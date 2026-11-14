@@ -12,6 +12,10 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.text.SpannableString
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
+import android.graphics.Typeface
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -76,10 +80,18 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.audio.SpeedProvider
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.OverlayEffect
+import androidx.media3.effect.Brightness
+import androidx.media3.effect.Contrast
+import androidx.media3.effect.HslAdjustment
+import androidx.media3.effect.Presentation
+import androidx.media3.effect.RgbAdjustment
+import androidx.media3.effect.RgbFilter
 import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.effect.TextOverlay
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.EditedMediaItemSequence
+import androidx.media3.transformer.Composition
 import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
@@ -116,21 +128,49 @@ private fun SajiCutApp() {
     val context = androidx.compose.ui.platform.LocalContext.current
     var videoUri by remember { mutableStateOf<Uri?>(null) }
     var videoName by remember { mutableStateOf("Untitled project") }
+    var additionalVideoUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var audioUri by remember { mutableStateOf<Uri?>(null) }
+    var audioName by remember { mutableStateOf<String?>(null) }
 
-    val videoPicker = rememberLauncherForActivityResult(
+    fun keepReadPermission(uri: Uri) {
+        try {
+            context.contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (_: Exception) {
+            // Some document providers do not support persistable permissions.
+        }
+    }
+
+    val newProjectPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { picked ->
+        if (picked.isNotEmpty()) {
+            picked.forEach(::keepReadPermission)
+            videoUri = picked.first()
+            videoName = queryDisplayName(context, picked.first()) ?: "New project"
+            additionalVideoUris = picked.drop(1)
+            audioUri = null
+            audioName = null
+        }
+    }
+
+    val addClipsPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { picked ->
+        if (picked.isNotEmpty()) {
+            picked.forEach(::keepReadPermission)
+            additionalVideoUris = (additionalVideoUris + picked).distinct()
+        }
+    }
+
+    val audioPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { picked ->
         if (picked != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    picked,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (_: Exception) {
-                // Some document providers do not offer persistable grants.
-            }
-            videoUri = picked
-            videoName = queryDisplayName(context, picked) ?: "New video"
+            keepReadPermission(picked)
+            audioUri = picked
+            audioName = queryDisplayName(context, picked) ?: "Background audio"
         }
     }
 
@@ -146,13 +186,22 @@ private fun SajiCutApp() {
     ) {
         Surface(modifier = Modifier.fillMaxSize(), color = Background) {
             if (videoUri == null) {
-                HomeScreen(onImport = { videoPicker.launch(arrayOf("video/*")) })
+                HomeScreen(onImport = { newProjectPicker.launch(arrayOf("video/*")) })
             } else {
                 EditorScreen(
                     uri = videoUri!!,
                     title = videoName,
-                    onBack = { videoUri = null },
-                    onAddVideo = { videoPicker.launch(arrayOf("video/*")) }
+                    additionalVideoUris = additionalVideoUris,
+                    audioUri = audioUri,
+                    audioName = audioName,
+                    onBack = {
+                        videoUri = null
+                        additionalVideoUris = emptyList()
+                        audioUri = null
+                        audioName = null
+                    },
+                    onAddVideo = { addClipsPicker.launch(arrayOf("video/*")) },
+                    onAddAudio = { audioPicker.launch(arrayOf("audio/*")) }
                 )
             }
         }
