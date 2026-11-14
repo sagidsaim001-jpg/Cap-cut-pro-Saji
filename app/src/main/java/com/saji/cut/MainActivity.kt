@@ -341,6 +341,7 @@ private enum class EditorTool(val title: String) {
     Edit("Edit"),
     Audio("Audio"),
     Text("Text"),
+    Stickers("Stickers"),
     Filters("Filters"),
     Adjust("Adjust"),
     Speed("Speed"),
@@ -880,6 +881,7 @@ private fun EditorScreen(
                 ToolButton("Edit", Icons.Default.ContentCut, selectedTool == EditorTool.Edit) { selectedTool = EditorTool.Edit }
                 ToolButton("Audio", Icons.Default.MusicNote, selectedTool == EditorTool.Audio) { selectedTool = EditorTool.Audio }
                 ToolButton("Text", Icons.Default.TextFields, selectedTool == EditorTool.Text) { selectedTool = EditorTool.Text }
+                ToolButton("Stickers", Icons.Default.Add, selectedTool == EditorTool.Stickers) { selectedTool = EditorTool.Stickers }
                 ToolButton("Filters", Icons.Default.Tune, selectedTool == EditorTool.Filters) { selectedTool = EditorTool.Filters }
                 ToolButton("Adjust", Icons.Default.Crop, selectedTool == EditorTool.Adjust) { selectedTool = EditorTool.Adjust }
                 ToolButton("Speed", Icons.Default.Speed, selectedTool == EditorTool.Speed) { selectedTool = EditorTool.Speed }
@@ -995,6 +997,32 @@ private fun EditorScreen(
                         Text(captionFileName + "  •  " + captionCues.size + " captions", color = Accent, fontSize = 10.sp)
                     }
                     Text("SRT subtitles follow their timecodes in preview and are burned into export.", color = Muted, fontSize = 10.sp)
+                }
+                EditorTool.Stickers -> {
+                    FilledTonalButton(
+                        onClick = onAddSticker,
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = PanelLight, contentColor = Color.White)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(7.dp))
+                        Text(if (stickerUri == null) "Add image / sticker" else "Replace image / sticker", fontSize = 12.sp)
+                    }
+                    if (stickerName != null) {
+                        Text("Overlay: " + stickerName, color = Accent, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("STICKER POSITION", color = Muted, fontSize = 9.sp, letterSpacing = 1.2.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                            listOf("Top left", "Top right", "Center", "Bottom left", "Bottom right").forEach { choice ->
+                                EditorChoice(choice, stickerPosition == choice) { stickerPosition = choice }
+                            }
+                        }
+                        Text("Sticker size  " + (stickerScale * 100).toInt() + "%", color = Muted, fontSize = 10.sp)
+                        Slider(value = stickerScale, onValueChange = { stickerScale = it }, valueRange = 0.08f..0.65f)
+                        Text("Opacity  " + (stickerOpacity * 100).toInt() + "%", color = Muted, fontSize = 10.sp)
+                        Slider(value = stickerOpacity, onValueChange = { stickerOpacity = it }, valueRange = 0.1f..1f)
+                    } else {
+                        Text("Import a transparent PNG or image to place it over your video.", color = Muted, fontSize = 10.sp)
+                    }
+                    Text("Sticker stays visible in preview and is included in the exported video.", color = Muted, fontSize = 10.sp)
                 }
                 EditorTool.Filters -> {
                     Text("FILTER PRESETS", color = Muted, fontSize = 9.sp, letterSpacing = 1.2.sp)
@@ -1161,6 +1189,7 @@ private fun previewTextColor(name: String): Color = when (name) {
 
 @OptIn(UnstableApi::class)
 private fun buildVisualEffects(
+    context: Context,
     filterPreset: String,
     brightness: Float,
     contrast: Float,
@@ -1168,7 +1197,11 @@ private fun buildVisualEffects(
     rotation: Float,
     zoom: Float,
     aspectPreset: String,
-    exportResolution: String
+    exportResolution: String,
+    stickerUri: Uri?,
+    stickerPosition: String,
+    stickerScale: Float,
+    stickerOpacity: Float
 ): MutableList<androidx.media3.common.Effect> {
     val effects = mutableListOf<androidx.media3.common.Effect>()
 
@@ -1233,6 +1266,27 @@ private fun buildVisualEffects(
         else -> 0
     }
     if (outputHeight > 0) effects.add(Presentation.createForHeight(outputHeight))
+
+    if (stickerUri != null) {
+        val anchors = when (stickerPosition) {
+            "Top left" -> Triple(-0.84f, 0.84f, Pair(-1f, 1f))
+            "Top right" -> Triple(0.84f, 0.84f, Pair(1f, 1f))
+            "Bottom left" -> Triple(-0.84f, -0.84f, Pair(-1f, -1f))
+            "Center" -> Triple(0f, 0f, Pair(0f, 0f))
+            else -> Triple(0.84f, -0.84f, Pair(1f, -1f))
+        }
+        val overlaySettings = StaticOverlaySettings.Builder()
+            .setBackgroundFrameAnchor(anchors.first, anchors.second)
+            .setOverlayFrameAnchor(anchors.third.first, anchors.third.second)
+            .setScale(stickerScale, stickerScale)
+            .setAlphaScale(stickerOpacity)
+            .build()
+        effects.add(
+            OverlayEffect(
+                listOf(BitmapOverlay.createStaticBitmapOverlay(context, stickerUri, overlaySettings))
+            )
+        )
+    }
     return effects
 }
 
