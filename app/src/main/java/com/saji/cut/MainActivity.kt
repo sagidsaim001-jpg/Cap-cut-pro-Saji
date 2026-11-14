@@ -88,6 +88,7 @@ import androidx.media3.effect.HslAdjustment
 import androidx.media3.effect.Presentation
 import androidx.media3.effect.RgbAdjustment
 import androidx.media3.effect.RgbFilter
+import androidx.media3.effect.TimestampWrapper
 import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.effect.TextOverlay
 import androidx.media3.exoplayer.ExoPlayer
@@ -435,6 +436,10 @@ private fun EditorScreen(
     val safeDuration = durationMs.coerceAtLeast(1_000L)
     val currentTime = formatTime(playheadMs)
     val totalTime = formatTime(durationMs)
+    val activeCaption = captionCues.firstOrNull {
+        playheadMs >= it.startMs && playheadMs < it.endMs
+    }?.text.orEmpty()
+    val previewOverlayText = if (overlayText.isNotBlank()) overlayText else activeCaption
 
     Column(
         modifier = Modifier
@@ -531,6 +536,31 @@ private fun EditorScreen(
                             }
 
                             val videoSequence = EditedMediaItemSequence.withAudioAndVideoFrom(editedClips)
+                            val subtitleEffects = captionCues.mapNotNull { cue ->
+                                if (cue.text.isBlank() || cue.endMs <= cue.startMs) {
+                                    null
+                                } else {
+                                    val subtitleText = SpannableString(cue.text)
+                                    subtitleText.setSpan(
+                                        ForegroundColorSpan(textColorInt(overlayTextColor)),
+                                        0, subtitleText.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                                    )
+                                    subtitleText.setSpan(
+                                        RelativeSizeSpan(overlayTextSize / 22f),
+                                        0, subtitleText.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                                    )
+                                    subtitleText.setSpan(
+                                        StyleSpan(Typeface.BOLD),
+                                        0, subtitleText.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                                    )
+                                    TimestampWrapper(
+                                        OverlayEffect(listOf(TextOverlay.createStaticTextOverlay(subtitleText))),
+                                        cue.startMs * 1_000L,
+                                        cue.endMs * 1_000L
+                                    )
+                                }
+                            }
+                            val compositionEffects = Effects(emptyList(), subtitleEffects)
                             val composition = if (audioUri != null) {
                                 val gainBuilder = DefaultGainProvider.Builder(musicVolume)
                                 if (musicFadeInMs > 0f) {
@@ -548,9 +578,13 @@ private fun EditorScreen(
                                     .buildUpon()
                                     .setIsLooping(true)
                                     .build()
-                                Composition.Builder(listOf(videoSequence, musicSequence)).build()
+                                Composition.Builder(listOf(videoSequence, musicSequence))
+                                    .setEffects(compositionEffects)
+                                    .build()
                             } else {
-                                Composition.Builder(listOf(videoSequence)).build()
+                                Composition.Builder(listOf(videoSequence))
+                                    .setEffects(compositionEffects)
+                                    .build()
                             }
 
                             val outputFile = File(context.cacheDir, "saji_cut_" + System.currentTimeMillis() + ".mp4")
@@ -632,9 +666,9 @@ private fun EditorScreen(
                 },
                 update = { it.player = player }
             )
-            if (overlayText.isNotBlank()) {
+            if (previewOverlayText.isNotBlank()) {
                 Text(
-                    overlayText,
+                    previewOverlayText,
                     color = previewTextColor(overlayTextColor),
                     fontSize = overlayTextSize.sp,
                     fontWeight = FontWeight.Bold,
@@ -915,7 +949,18 @@ private fun EditorScreen(
                         valueRange = 12f..52f,
                         colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = Accent, activeTrackColor = Accent)
                     )
-                    Text("Text style is visible in preview and burned into the exported MP4.", color = Muted, fontSize = 10.sp)
+                    FilledTonalButton(
+                        onClick = onAddCaptions,
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = PanelLight, contentColor = Color.White)
+                    ) {
+                        Icon(Icons.Default.Movie, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(7.dp))
+                        Text("Import SRT captions", fontSize = 12.sp)
+                    }
+                    if (captionFileName != null) {
+                        Text(captionFileName + "  •  " + captionCues.size + " captions", color = Accent, fontSize = 10.sp)
+                    }
+                    Text("SRT subtitles follow their timecodes in preview and are burned into export.", color = Muted, fontSize = 10.sp)
                 }
                 EditorTool.Filters -> {
                     Text("FILTER PRESETS", color = Muted, fontSize = 9.sp, letterSpacing = 1.2.sp)
@@ -1151,6 +1196,40 @@ private fun buildVisualEffects(
     }
     if (outputHeight > 0) effects.add(Presentation.createForHeight(outputHeight))
     return effects
+}
+
+private data class CaptionCue(
+    val startMs: Long,
+    val endMs: Long,
+    val text: String
+)
+
+private fun parseSrtTimestamp(value: String): Long? {
+    val match = Regex("(\\d{2}):(\\d{2}):(\\d{2})[,.](\\d{3})").find(value.trim()) ?: return null
+    val hours = match.groupValues[1].toLongOrNull() ?: return null
+    val minutes = match.groupValues[2].toLongOrNull() ?: return null
+    val seconds = match.groupValues[3].toLongOrNull() ?: return null
+    val millis = match.groupValues[4].toLongOrNull() ?: return null
+    return (((hours * 60L + minutes) * 60L + seconds) * 1_000L) + millis
+}
+
+private fun parseSrt(source: String): List<CaptionCue> {
+    if (source.isBlank()) return emptyList()
+    return source.replace("\r", "")
+        .trim()
+        .split(Regex("\\n\\s*\\n"))
+        .mapNotNull { block ->
+            val lines = block.lines()
+            val timeLineIndex = lines.indexOfFirst { it.contains("-->") }
+            if (timeLineIndex < 0) return@mapNotNull null
+            val timeParts = lines[timeLineIndex].split("-->")
+            if (timeParts.size != 2) return@mapNotNull null
+            val start = parseSrtTimestamp(timeParts[0]) ?: return@mapNotNull null
+            val end = parseSrtTimestamp(timeParts[1]) ?: return@mapNotNull null
+            val caption = lines.drop(timeLineIndex + 1).joinToString("\n").trim()
+            if (caption.isBlank() || end <= start) null else CaptionCue(start, end, caption)
+        }
+        .sortedBy { it.startMs }
 }
 
 private fun formatTime(timeMs: Long): String {
