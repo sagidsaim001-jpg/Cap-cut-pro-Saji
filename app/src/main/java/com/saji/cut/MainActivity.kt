@@ -297,6 +297,8 @@ private enum class EditorTool(val title: String) {
     Edit("Edit"),
     Audio("Audio"),
     Text("Text"),
+    Filters("Filters"),
+    Adjust("Adjust"),
     Speed("Speed"),
     Canvas("Canvas")
 }
@@ -306,13 +308,18 @@ private enum class EditorTool(val title: String) {
 private fun EditorScreen(
     uri: Uri,
     title: String,
+    additionalVideoUris: List<Uri>,
+    audioUri: Uri?,
+    audioName: String?,
     onBack: () -> Unit,
-    onAddVideo: () -> Unit
+    onAddVideo: () -> Unit,
+    onAddAudio: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val player = remember(uri) {
         ExoPlayer.Builder(context).build().apply {
+            setVideoEffects(emptyList())
             setMediaItem(MediaItem.fromUri(uri))
             prepare()
             playWhenReady = false
@@ -333,14 +340,29 @@ private fun EditorScreen(
     var muted by remember { mutableStateOf(false) }
     var rotation by remember { mutableFloatStateOf(0f) }
     var overlayText by remember { mutableStateOf("") }
+    var overlayTextSize by remember { mutableFloatStateOf(22f) }
+    var overlayTextColor by remember { mutableStateOf("White") }
+    var filterPreset by remember { mutableStateOf("Original") }
+    var brightness by remember { mutableFloatStateOf(0f) }
+    var contrast by remember { mutableFloatStateOf(0f) }
+    var saturation by remember { mutableFloatStateOf(0f) }
+    var aspectPreset by remember { mutableStateOf("Original") }
+    var exportResolution by remember { mutableStateOf("1080p") }
     var splitMarkers = remember(uri) { mutableStateListOf<Long>() }
     var exporting by remember { mutableStateOf(false) }
     var exportProgress by remember { mutableIntStateOf(0) }
     var exportMessage by remember { mutableStateOf<String?>(null) }
 
+    val previewEffects = remember(
+        filterPreset, brightness, contrast, saturation, rotation, aspectPreset, exportResolution
+    ) {
+        buildVisualEffects(filterPreset, brightness, contrast, saturation, rotation, aspectPreset, exportResolution)
+    }
+
     SideEffect {
         player.volume = if (muted) 0f else 1f
         player.setPlaybackSpeed(speed)
+        player.setVideoEffects(previewEffects)
     }
 
     LaunchedEffect(player) {
