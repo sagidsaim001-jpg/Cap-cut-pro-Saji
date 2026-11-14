@@ -718,6 +718,41 @@ private fun EditorScreen(
                 )
             }
 
+            if (additionalVideoUris.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("VIDEO TRACKS", color = Muted, fontSize = 9.sp, letterSpacing = 1.2.sp)
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        additionalVideoUris.forEachIndexed { index, clipUri ->
+                            val clipLabel = queryDisplayName(context, clipUri) ?: ("Clip " + (index + 2))
+                            Surface(
+                                color = PanelLight,
+                                shape = RoundedCornerShape(7.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF30404B))
+                            ) {
+                                Text(
+                                    (index + 2).toString() + " • " + clipLabel,
+                                    color = Color.White,
+                                    fontSize = 9.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (audioName != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.MusicNote, contentDescription = null, tint = Accent, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("AUDIO TRACK  •  " + audioName, color = Accent, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("IN", color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 Slider(
