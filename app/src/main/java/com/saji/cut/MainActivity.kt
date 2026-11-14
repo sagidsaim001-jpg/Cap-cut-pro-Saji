@@ -83,6 +83,8 @@ import androidx.media3.common.audio.DefaultGainProvider
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.effect.Brightness
+import androidx.media3.effect.BitmapOverlay
+import androidx.media3.effect.StaticOverlaySettings
 import androidx.media3.effect.Contrast
 import androidx.media3.effect.HslAdjustment
 import androidx.media3.effect.Presentation
@@ -136,6 +138,8 @@ private fun SajiCutApp() {
     var audioName by remember { mutableStateOf<String?>(null) }
     var captionCues by remember { mutableStateOf<List<CaptionCue>>(emptyList()) }
     var captionFileName by remember { mutableStateOf<String?>(null) }
+    var stickerUri by remember { mutableStateOf<Uri?>(null) }
+    var stickerName by remember { mutableStateOf<String?>(null) }
 
     fun keepReadPermission(uri: Uri) {
         try {
@@ -194,6 +198,16 @@ private fun SajiCutApp() {
         }
     }
 
+    val stickerPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { picked ->
+        if (picked != null) {
+            keepReadPermission(picked)
+            stickerUri = picked
+            stickerName = queryDisplayName(context, picked) ?: "Image sticker"
+        }
+    }
+
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = Accent,
@@ -216,6 +230,8 @@ private fun SajiCutApp() {
                     audioName = audioName,
                     captionCues = captionCues,
                     captionFileName = captionFileName,
+                    stickerUri = stickerUri,
+                    stickerName = stickerName,
                     onBack = {
                         videoUri = null
                         additionalVideoUris = emptyList()
@@ -223,10 +239,13 @@ private fun SajiCutApp() {
                         audioName = null
                         captionCues = emptyList()
                         captionFileName = null
+                        stickerUri = null
+                        stickerName = null
                     },
                     onAddVideo = { addClipsPicker.launch(arrayOf("video/*")) },
                     onAddAudio = { audioPicker.launch(arrayOf("audio/*")) },
-                    onAddCaptions = { captionPicker.launch(arrayOf("*/*")) }
+                    onAddCaptions = { captionPicker.launch(arrayOf("*/*")) },
+                    onAddSticker = { stickerPicker.launch(arrayOf("image/*")) }
                 )
             }
         }
@@ -338,10 +357,13 @@ private fun EditorScreen(
     audioName: String?,
     captionCues: List<CaptionCue>,
     captionFileName: String?,
+    stickerUri: Uri?,
+    stickerName: String?,
     onBack: () -> Unit,
     onAddVideo: () -> Unit,
     onAddAudio: () -> Unit,
-    onAddCaptions: () -> Unit
+    onAddCaptions: () -> Unit,
+    onAddSticker: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
@@ -380,15 +402,20 @@ private fun EditorScreen(
     var saturation by remember { mutableFloatStateOf(0f) }
     var aspectPreset by remember { mutableStateOf("Original") }
     var exportResolution by remember { mutableStateOf("1080p") }
+    var stickerPosition by remember { mutableStateOf("Bottom right") }
+    var stickerScale by remember { mutableFloatStateOf(0.28f) }
+    var stickerOpacity by remember { mutableFloatStateOf(1f) }
     var splitMarkers = remember(uri) { mutableStateListOf<Long>() }
     var exporting by remember { mutableStateOf(false) }
     var exportProgress by remember { mutableIntStateOf(0) }
     var exportMessage by remember { mutableStateOf<String?>(null) }
 
     val previewEffects = remember(
-        filterPreset, brightness, contrast, saturation, rotation, zoom, aspectPreset, exportResolution
+        filterPreset, brightness, contrast, saturation, rotation, zoom, aspectPreset, exportResolution,
+        stickerUri, stickerPosition, stickerScale, stickerOpacity
     ) {
-        buildVisualEffects(filterPreset, brightness, contrast, saturation, rotation, zoom, aspectPreset, exportResolution)
+        buildVisualEffects(context, filterPreset, brightness, contrast, saturation, rotation, zoom, aspectPreset, exportResolution,
+            stickerUri, stickerPosition, stickerScale, stickerOpacity)
     }
 
     SideEffect {
