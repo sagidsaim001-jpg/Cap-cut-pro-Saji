@@ -553,11 +553,17 @@ private fun EditorScreen(
                                         StyleSpan(Typeface.BOLD),
                                         0, subtitleText.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                                     )
-                                    TimestampWrapper(
-                                        OverlayEffect(listOf(TextOverlay.createStaticTextOverlay(subtitleText))),
-                                        cue.startMs * 1_000L,
-                                        cue.endMs * 1_000L
-                                    )
+                                    val captionStartMs = ((cue.startMs - trimStartMs).coerceAtLeast(0L) / speed).toLong()
+                                    val captionEndMs = ((cue.endMs - trimStartMs).coerceAtLeast(0L) / speed).toLong()
+                                    if (captionEndMs <= captionStartMs) {
+                                        null
+                                    } else {
+                                        TimestampWrapper(
+                                            OverlayEffect(listOf(TextOverlay.createStaticTextOverlay(subtitleText))),
+                                            captionStartMs * 1_000L,
+                                            captionEndMs * 1_000L
+                                        )
+                                    }
                                 }
                             }
                             val compositionEffects = Effects(emptyList(), subtitleEffects)
