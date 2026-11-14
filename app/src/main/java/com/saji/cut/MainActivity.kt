@@ -957,6 +957,115 @@ private fun ToolButton(
     }
 }
 
+@Composable
+private fun EditorChoice(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        color = if (selected) Accent.copy(alpha = 0.18f) else PanelLight,
+        shape = RoundedCornerShape(9.dp),
+        border = if (selected) androidx.compose.foundation.BorderStroke(1.dp, Accent) else null,
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Text(
+            label,
+            color = if (selected) Color.White else Muted,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp)
+        )
+    }
+}
+
+private fun textColorInt(name: String): Int = when (name) {
+    "Yellow" -> android.graphics.Color.YELLOW
+    "Cyan" -> android.graphics.Color.CYAN
+    "Pink" -> android.graphics.Color.rgb(255, 105, 180)
+    "Green" -> android.graphics.Color.GREEN
+    else -> android.graphics.Color.WHITE
+}
+
+private fun previewTextColor(name: String): Color = when (name) {
+    "Yellow" -> Color(0xFFFFEB3B)
+    "Cyan" -> Color(0xFF4DEBFF)
+    "Pink" -> Color(0xFFFF69B4)
+    "Green" -> Color(0xFF62F28B)
+    else -> Color.White
+}
+
+@OptIn(UnstableApi::class)
+private fun buildVisualEffects(
+    filterPreset: String,
+    brightness: Float,
+    contrast: Float,
+    saturation: Float,
+    rotation: Float,
+    aspectPreset: String,
+    exportResolution: String
+): MutableList<androidx.media3.common.Effect> {
+    val effects = mutableListOf<androidx.media3.common.Effect>()
+
+    when (filterPreset) {
+        "Mono" -> effects.add(RgbFilter.createGrayscaleFilter())
+        "Negative" -> effects.add(RgbFilter.createInvertedFilter())
+        "Warm" -> effects.add(
+            RgbAdjustment.Builder()
+                .setRedScale(1.12f)
+                .setGreenScale(1.02f)
+                .setBlueScale(0.88f)
+                .build()
+        )
+        "Cool" -> effects.add(
+            RgbAdjustment.Builder()
+                .setRedScale(0.90f)
+                .setGreenScale(1.02f)
+                .setBlueScale(1.12f)
+                .build()
+        )
+    }
+
+    if (brightness != 0f) effects.add(Brightness(brightness))
+    if (contrast != 0f) effects.add(Contrast(contrast))
+
+    val presetSaturation = if (filterPreset == "Vivid") 24f else 0f
+    val totalSaturation = (saturation + presetSaturation).coerceIn(-100f, 100f)
+    if (totalSaturation != 0f) {
+        effects.add(HslAdjustment.Builder().adjustSaturation(totalSaturation).build())
+    }
+
+    if (rotation != 0f) {
+        effects.add(
+            ScaleAndRotateTransformation.Builder()
+                .setRotationDegrees(rotation)
+                .build()
+        )
+    }
+
+    val aspectRatio = when (aspectPreset) {
+        "9:16" -> 9f / 16f
+        "16:9" -> 16f / 9f
+        "1:1" -> 1f
+        "4:5" -> 4f / 5f
+        "4:3" -> 4f / 3f
+        else -> 0f
+    }
+    if (aspectRatio > 0f) {
+        effects.add(
+            Presentation.createForAspectRatio(
+                aspectRatio,
+                Presentation.LAYOUT_SCALE_TO_FIT
+            )
+        )
+    }
+
+    val outputHeight = when (exportResolution) {
+        "480p" -> 480
+        "720p" -> 720
+        "1080p" -> 1080
+        else -> 0
+    }
+    if (outputHeight > 0) effects.add(Presentation.createForHeight(outputHeight))
+    return effects
+}
+
 private fun formatTime(timeMs: Long): String {
     val safe = timeMs.coerceAtLeast(0L)
     val minutes = safe / 60_000L
