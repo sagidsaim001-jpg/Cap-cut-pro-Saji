@@ -243,6 +243,9 @@ private fun SajiCutApp() {
                         stickerName = null
                     },
                     onAddVideo = { addClipsPicker.launch(arrayOf("video/*")) },
+                    onRemoveAdditionalVideo = { removeUri ->
+                        additionalVideoUris = additionalVideoUris.filterNot { it == removeUri }
+                    },
                     onAddAudio = { audioPicker.launch(arrayOf("audio/*")) },
                     onAddCaptions = { captionPicker.launch(arrayOf("*/*")) },
                     onAddSticker = { stickerPicker.launch(arrayOf("image/*")) }
@@ -362,6 +365,7 @@ private fun EditorScreen(
     stickerName: String?,
     onBack: () -> Unit,
     onAddVideo: () -> Unit,
+    onRemoveAdditionalVideo: (Uri) -> Unit,
     onAddAudio: () -> Unit,
     onAddCaptions: () -> Unit,
     onAddSticker: () -> Unit
@@ -760,7 +764,9 @@ private fun EditorScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Panel)
-                .padding(horizontal = 14.dp, vertical = 11.dp),
+                .padding(horizontal = 14.dp, vertical = 11.dp)
+                .heightIn(max = 330.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(9.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -827,12 +833,14 @@ private fun EditorScreen(
                                 border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF30404B))
                             ) {
                                 Text(
-                                    (index + 2).toString() + " • " + clipLabel,
+                                    "× " + (index + 2).toString() + " • " + clipLabel,
                                     color = Color.White,
                                     fontSize = 9.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                    modifier = Modifier
+                                        .clickable { onRemoveAdditionalVideo(clipUri) }
+                                        .padding(horizontal = 8.dp, vertical = 6.dp)
                                 )
                             }
                         }
