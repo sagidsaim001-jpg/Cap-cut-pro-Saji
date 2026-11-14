@@ -78,6 +78,8 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.audio.SpeedProvider
+import androidx.media3.common.audio.GainProcessor
+import androidx.media3.common.audio.DefaultGainProvider
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.effect.Brightness
@@ -338,6 +340,9 @@ private fun EditorScreen(
     var selectedTool by remember { mutableStateOf(EditorTool.Edit) }
     var speed by remember { mutableFloatStateOf(1f) }
     var muted by remember { mutableStateOf(false) }
+    var clipVolume by remember { mutableFloatStateOf(1f) }
+    var musicVolume by remember { mutableFloatStateOf(0.75f) }
+    var musicFadeInMs by remember { mutableFloatStateOf(0f) }
     var rotation by remember { mutableFloatStateOf(0f) }
     var overlayText by remember { mutableStateOf("") }
     var overlayTextSize by remember { mutableFloatStateOf(22f) }
@@ -360,7 +365,7 @@ private fun EditorScreen(
     }
 
     SideEffect {
-        player.volume = if (muted) 0f else 1f
+        player.volume = if (muted) 0f else clipVolume
         player.setPlaybackSpeed(speed)
         player.setVideoEffects(previewEffects)
     }
@@ -475,28 +480,44 @@ private fun EditorScreen(
                                             .build()
                                     )
                                     .build()
+                                val clipAudioProcessors = if (!muted && clipVolume < 0.999f) {
+                                    listOf(GainProcessor(DefaultGainProvider.Builder(clipVolume).build()))
+                                } else emptyList()
                                 editedClips.add(
                                     EditedMediaItem.Builder(segment)
                                         .setRemoveAudio(muted)
                                         .setSpeed(speedProvider)
-                                        .setEffects(Effects(emptyList(), videoEffects))
+                                        .setEffects(Effects(clipAudioProcessors, videoEffects))
                                         .build()
                                 )
                             }
 
                             additionalVideoUris.forEach { extraUri ->
+                                val extraAudioProcessors = if (!muted && clipVolume < 0.999f) {
+                                    listOf(GainProcessor(DefaultGainProvider.Builder(clipVolume).build()))
+                                } else emptyList()
                                 editedClips.add(
                                     EditedMediaItem.Builder(MediaItem.fromUri(extraUri))
                                         .setRemoveAudio(muted)
                                         .setSpeed(speedProvider)
-                                        .setEffects(Effects(emptyList(), videoEffects))
+                                        .setEffects(Effects(extraAudioProcessors, videoEffects))
                                         .build()
                                 )
                             }
 
                             val videoSequence = EditedMediaItemSequence.withAudioAndVideoFrom(editedClips)
                             val composition = if (audioUri != null) {
-                                val musicItem = EditedMediaItem.Builder(MediaItem.fromUri(audioUri)).build()
+                                val gainBuilder = DefaultGainProvider.Builder(musicVolume)
+                                if (musicFadeInMs > 0f) {
+                                    gainBuilder.addFadeAt(
+                                        0L,
+                                        (musicFadeInMs * 1000f).toLong().coerceAtLeast(1L),
+                                        DefaultGainProvider.FADE_IN_LINEAR
+                                    )
+                                }
+                                val musicItem = EditedMediaItem.Builder(MediaItem.fromUri(audioUri))
+                                    .setEffects(Effects(listOf(GainProcessor(gainBuilder.build())), emptyList()))
+                                    .build()
                                 val musicSequence = EditedMediaItemSequence
                                     .withAudioFrom(listOf(musicItem))
                                     .buildUpon()
@@ -793,6 +814,8 @@ private fun EditorScreen(
                         Text("Mute original clip audio", modifier = Modifier.weight(1f), fontSize = 13.sp)
                         Switch(checked = muted, onCheckedChange = { muted = it })
                     }
+                    Text("Original audio volume  " + (clipVolume * 100).toInt() + "%", color = Muted, fontSize = 10.sp)
+                    Slider(value = clipVolume, onValueChange = { clipVolume = it }, valueRange = 0f..1f)
                     FilledTonalButton(
                         onClick = onAddAudio,
                         colors = ButtonDefaults.filledTonalButtonColors(containerColor = PanelLight, contentColor = Color.White)
@@ -803,8 +826,12 @@ private fun EditorScreen(
                     }
                     if (audioName != null) {
                         Text("Music track: " + audioName, color = Accent, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("Music volume  " + (musicVolume * 100).toInt() + "%", color = Muted, fontSize = 10.sp)
+                        Slider(value = musicVolume, onValueChange = { musicVolume = it }, valueRange = 0f..1f)
+                        Text("Music fade-in  " + musicFadeInMs.toInt() + " ms", color = Muted, fontSize = 10.sp)
+                        Slider(value = musicFadeInMs, onValueChange = { musicFadeInMs = it }, valueRange = 0f..5000f)
                     }
-                    Text("Background music is mixed with the video and loops to cover the final video duration.", color = Muted, fontSize = 10.sp)
+                    Text("Background music is mixed with the video and loops to cover the final video duration. Volume and fade-in apply during export.", color = Muted, fontSize = 10.sp)
                 }
                 EditorTool.Text -> {
                     OutlinedTextField(
