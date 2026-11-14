@@ -188,8 +188,7 @@ private fun HomeScreen(onImport: () -> Unit) {
         }
 
         Spacer(Modifier.height(14.dp))
-        Text("Make every frame
-mean something.", fontSize = 34.sp, lineHeight = 39.sp, fontWeight = FontWeight.Bold)
+        Text("Make every frame\nmean something.", fontSize = 34.sp, lineHeight = 39.sp, fontWeight = FontWeight.Bold)
         Text(
             "A timeline editor for your videos, clips and creative ideas.",
             color = Muted,
