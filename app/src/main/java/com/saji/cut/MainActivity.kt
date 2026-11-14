@@ -434,41 +434,79 @@ private fun EditorScreen(
                         } else {
                             exporting = true
                             exportProgress = 0
-                            val clip = MediaItem.Builder()
-                                .setUri(uri)
-                                .setClippingConfiguration(
-                                    MediaItem.ClippingConfiguration.Builder()
-                                        .setStartPositionMs(trimStartMs)
-                                        .setEndPositionMs(trimEndMs)
-                                        .build()
-                                )
-                                .build()
-
                             val speedProvider = object : SpeedProvider {
                                 override fun getSpeed(presentationTimeUs: Long): Float = speed
                                 override fun getNextSpeedChangeTimeUs(timeUs: Long): Long = C.TIME_UNSET
                             }
 
-                            val videoEffects = mutableListOf<androidx.media3.common.Effect>()
-                            if (rotation != 0f) {
-                                videoEffects.add(
-                                    ScaleAndRotateTransformation.Builder()
-                                        .setRotationDegrees(rotation)
-                                        .build()
-                                )
-                            }
+                            val videoEffects = previewEffects.toMutableList()
                             if (overlayText.isNotBlank()) {
-                                val textLayer = TextOverlay.createStaticTextOverlay(SpannableString(overlayText))
+                                val styledText = SpannableString(overlayText)
+                                styledText.setSpan(
+                                    ForegroundColorSpan(textColorInt(overlayTextColor)),
+                                    0, styledText.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                                )
+                                styledText.setSpan(
+                                    RelativeSizeSpan(overlayTextSize / 22f),
+                                    0, styledText.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                                )
+                                styledText.setSpan(
+                                    StyleSpan(Typeface.BOLD),
+                                    0, styledText.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                                )
+                                val textLayer = TextOverlay.createStaticTextOverlay(styledText)
                                 videoEffects.add(OverlayEffect(listOf(textLayer)))
                             }
 
-                            val editBuilder = EditedMediaItem.Builder(clip)
-                                .setRemoveAudio(muted)
-                                .setSpeed(speedProvider)
-                            if (videoEffects.isNotEmpty()) {
-                                editBuilder.setEffects(Effects(emptyList(), videoEffects))
+                            val cutPoints = (listOf(trimStartMs) +
+                                splitMarkers.filter { it > trimStartMs && it < trimEndMs }.sorted() +
+                                listOf(trimEndMs)).distinct()
+                            val editedClips = mutableListOf<EditedMediaItem>()
+                            for (index in 0 until (cutPoints.size - 1)) {
+                                val segmentStart = cutPoints[index]
+                                val segmentEnd = cutPoints[index + 1]
+                                if (segmentEnd <= segmentStart) continue
+                                val segment = MediaItem.Builder()
+                                    .setUri(uri)
+                                    .setClippingConfiguration(
+                                        MediaItem.ClippingConfiguration.Builder()
+                                            .setStartPositionMs(segmentStart)
+                                            .setEndPositionMs(segmentEnd)
+                                            .build()
+                                    )
+                                    .build()
+                                editedClips.add(
+                                    EditedMediaItem.Builder(segment)
+                                        .setRemoveAudio(muted)
+                                        .setSpeed(speedProvider)
+                                        .setEffects(Effects(emptyList(), videoEffects))
+                                        .build()
+                                )
                             }
-                            val editedItem = editBuilder.build()
+
+                            additionalVideoUris.forEach { extraUri ->
+                                editedClips.add(
+                                    EditedMediaItem.Builder(MediaItem.fromUri(extraUri))
+                                        .setRemoveAudio(muted)
+                                        .setSpeed(speedProvider)
+                                        .setEffects(Effects(emptyList(), videoEffects))
+                                        .build()
+                                )
+                            }
+
+                            val videoSequence = EditedMediaItemSequence.withAudioAndVideoFrom(editedClips)
+                            val composition = if (audioUri != null) {
+                                val musicItem = EditedMediaItem.Builder(MediaItem.fromUri(audioUri)).build()
+                                val musicSequence = EditedMediaItemSequence
+                                    .withAudioFrom(listOf(musicItem))
+                                    .buildUpon()
+                                    .setIsLooping(true)
+                                    .build()
+                                Composition.Builder(videoSequence, musicSequence).build()
+                            } else {
+                                Composition.Builder(videoSequence).build()
+                            }
+
                             val outputFile = File(context.cacheDir, "saji_cut_" + System.currentTimeMillis() + ".mp4")
                             val transformer = Transformer.Builder(context)
                                 .addListener(object : Transformer.Listener {
@@ -499,7 +537,7 @@ private fun EditorScreen(
                                 .build()
 
                             try {
-                                transformer.start(editedItem, outputFile.absolutePath)
+                                transformer.start(composition, outputFile.absolutePath)
                                 scope.launch {
                                     val holder = ProgressHolder()
                                     while (exporting) {
