@@ -589,8 +589,8 @@ private fun EditorScreen(
             if (overlayText.isNotBlank()) {
                 Text(
                     overlayText,
-                    color = Color.White,
-                    fontSize = 22.sp,
+                    color = previewTextColor(overlayTextColor),
+                    fontSize = overlayTextSize.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .align(Alignment.Center)
@@ -731,6 +731,8 @@ private fun EditorScreen(
                 ToolButton("Edit", Icons.Default.ContentCut, selectedTool == EditorTool.Edit) { selectedTool = EditorTool.Edit }
                 ToolButton("Audio", Icons.Default.MusicNote, selectedTool == EditorTool.Audio) { selectedTool = EditorTool.Audio }
                 ToolButton("Text", Icons.Default.TextFields, selectedTool == EditorTool.Text) { selectedTool = EditorTool.Text }
+                ToolButton("Filters", Icons.Default.Tune, selectedTool == EditorTool.Filters) { selectedTool = EditorTool.Filters }
+                ToolButton("Adjust", Icons.Default.Crop, selectedTool == EditorTool.Adjust) { selectedTool = EditorTool.Adjust }
                 ToolButton("Speed", Icons.Default.Speed, selectedTool == EditorTool.Speed) { selectedTool = EditorTool.Speed }
                 ToolButton("Canvas", Icons.Default.Crop, selectedTool == EditorTool.Canvas) { selectedTool = EditorTool.Canvas }
             }
@@ -738,6 +740,14 @@ private fun EditorScreen(
             when (selectedTool) {
                 EditorTool.Edit -> {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        FilledTonalButton(
+                            onClick = onAddVideo,
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = Accent.copy(alpha = 0.18f), contentColor = Color.White)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text("Add clips", fontSize = 12.sp)
+                        }
                         FilledTonalButton(
                             onClick = {
                                 if (playheadMs > trimStartMs && playheadMs < trimEndMs) {
@@ -780,21 +790,69 @@ private fun EditorScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp, contentDescription = null, tint = Accent)
                         Spacer(Modifier.width(8.dp))
-                        Text("Mute original audio", modifier = Modifier.weight(1f), fontSize = 13.sp)
+                        Text("Mute original clip audio", modifier = Modifier.weight(1f), fontSize = 13.sp)
                         Switch(checked = muted, onCheckedChange = { muted = it })
                     }
-                    Text("Original sound is included in export unless mute is enabled.", color = Muted, fontSize = 10.sp)
+                    FilledTonalButton(
+                        onClick = onAddAudio,
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = PanelLight, contentColor = Color.White)
+                    ) {
+                        Icon(Icons.Default.MusicNote, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(7.dp))
+                        Text(if (audioUri == null) "Add background music" else "Replace background music", fontSize = 12.sp)
+                    }
+                    if (audioName != null) {
+                        Text("Music track: " + audioName, color = Accent, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Text("Background music is mixed with the video and loops to cover the final video duration.", color = Muted, fontSize = 10.sp)
                 }
                 EditorTool.Text -> {
                     OutlinedTextField(
                         value = overlayText,
                         onValueChange = { overlayText = it },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        label = { Text("Text overlay") },
+                        singleLine = false,
+                        label = { Text("Text / caption overlay") },
                         placeholder = { Text("Type a title or caption") }
                     )
-                    Text("Text is shown on the preview and burned into the exported video.", color = Muted, fontSize = 10.sp)
+                    Text("TEXT COLOR", color = Muted, fontSize = 9.sp, letterSpacing = 1.2.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        listOf("White", "Yellow", "Cyan", "Pink", "Green").forEach { choice ->
+                            EditorChoice(choice, overlayTextColor == choice) { overlayTextColor = choice }
+                        }
+                    }
+                    Text("SIZE  " + overlayTextSize.toInt() + " sp", color = Muted, fontSize = 10.sp)
+                    Slider(
+                        value = overlayTextSize,
+                        onValueChange = { overlayTextSize = it },
+                        valueRange = 12f..52f,
+                        colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = Accent, activeTrackColor = Accent)
+                    )
+                    Text("Text style is visible in preview and burned into the exported MP4.", color = Muted, fontSize = 10.sp)
+                }
+                EditorTool.Filters -> {
+                    Text("FILTER PRESETS", color = Muted, fontSize = 9.sp, letterSpacing = 1.2.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        listOf("Original", "Warm", "Cool", "Vivid", "Mono", "Negative").forEach { choice ->
+                            EditorChoice(choice, filterPreset == choice) { filterPreset = choice }
+                        }
+                    }
+                    Text("Selected filter is applied to the live preview and final export.", color = Muted, fontSize = 10.sp)
+                }
+                EditorTool.Adjust -> {
+                    Text("COLOR ADJUSTMENT", color = Muted, fontSize = 9.sp, letterSpacing = 1.2.sp)
+                    Text("Brightness  " + (brightness * 100).toInt(), color = Muted, fontSize = 10.sp)
+                    Slider(value = brightness, onValueChange = { brightness = it }, valueRange = -1f..1f)
+                    Text("Contrast  " + (contrast * 100).toInt(), color = Muted, fontSize = 10.sp)
+                    Slider(value = contrast, onValueChange = { contrast = it }, valueRange = -1f..1f)
+                    Text("Saturation  " + saturation.toInt(), color = Muted, fontSize = 10.sp)
+                    Slider(value = saturation, onValueChange = { saturation = it }, valueRange = -100f..100f)
+                    TextButton(onClick = {
+                        brightness = 0f
+                        contrast = 0f
+                        saturation = 0f
+                        filterPreset = "Original"
+                    }) { Text("Reset adjustments", color = Accent) }
                 }
                 EditorTool.Speed -> {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -821,13 +879,26 @@ private fun EditorScreen(
                     Text("Speed changes are applied to the exported MP4.", color = Muted, fontSize = 10.sp)
                 }
                 EditorTool.Canvas -> {
+                    Text("ASPECT RATIO", color = Muted, fontSize = 9.sp, letterSpacing = 1.2.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        listOf("Original", "9:16", "16:9", "1:1", "4:5", "4:3").forEach { choice ->
+                            EditorChoice(choice, aspectPreset == choice) { aspectPreset = choice }
+                        }
+                    }
+                    Text("EXPORT RESOLUTION", color = Muted, fontSize = 9.sp, letterSpacing = 1.2.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        listOf("480p", "720p", "1080p", "Original").forEach { choice ->
+                            EditorChoice(choice, exportResolution == choice) { exportResolution = choice }
+                        }
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Rotation", color = Muted, fontSize = 12.sp)
                         Text(rotation.roundToInt().toString() + "°", color = Accent, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { rotation = (rotation + 90f) % 360f }) { Text("Rotate 90°", color = Accent) }
                         TextButton(onClick = { rotation = 0f }) { Text("Reset", color = Color.White) }
                     }
-                    Text("Current export keeps the source frame size and applies rotation.", color = Muted, fontSize = 10.sp)
+                    Text("Aspect ratio, resolution and rotation are applied during export.", color = Muted, fontSize = 10.sp)
                 }
             }
         }
