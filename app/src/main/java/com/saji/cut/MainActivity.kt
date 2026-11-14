@@ -502,9 +502,9 @@ private fun EditorScreen(
                                     .buildUpon()
                                     .setIsLooping(true)
                                     .build()
-                                Composition.Builder(videoSequence, musicSequence).build()
+                                Composition.Builder(listOf(videoSequence, musicSequence)).build()
                             } else {
-                                Composition.Builder(videoSequence).build()
+                                Composition.Builder(listOf(videoSequence)).build()
                             }
 
                             val outputFile = File(context.cacheDir, "saji_cut_" + System.currentTimeMillis() + ".mp4")
