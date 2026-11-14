@@ -133,6 +133,8 @@ private fun SajiCutApp() {
     var additionalVideoUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var audioUri by remember { mutableStateOf<Uri?>(null) }
     var audioName by remember { mutableStateOf<String?>(null) }
+    var captionCues by remember { mutableStateOf<List<CaptionCue>>(emptyList()) }
+    var captionFileName by remember { mutableStateOf<String?>(null) }
 
     fun keepReadPermission(uri: Uri) {
         try {
@@ -176,6 +178,21 @@ private fun SajiCutApp() {
         }
     }
 
+    val captionPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { picked ->
+        if (picked != null) {
+            keepReadPermission(picked)
+            val subtitleText = try {
+                context.contentResolver.openInputStream(picked)?.bufferedReader()?.use { it.readText() }.orEmpty()
+            } catch (_: Exception) {
+                ""
+            }
+            captionCues = parseSrt(subtitleText)
+            captionFileName = queryDisplayName(context, picked) ?: "Subtitles.srt"
+        }
+    }
+
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = Accent,
@@ -196,14 +213,19 @@ private fun SajiCutApp() {
                     additionalVideoUris = additionalVideoUris,
                     audioUri = audioUri,
                     audioName = audioName,
+                    captionCues = captionCues,
+                    captionFileName = captionFileName,
                     onBack = {
                         videoUri = null
                         additionalVideoUris = emptyList()
                         audioUri = null
                         audioName = null
+                        captionCues = emptyList()
+                        captionFileName = null
                     },
                     onAddVideo = { addClipsPicker.launch(arrayOf("video/*")) },
-                    onAddAudio = { audioPicker.launch(arrayOf("audio/*")) }
+                    onAddAudio = { audioPicker.launch(arrayOf("audio/*")) },
+                    onAddCaptions = { captionPicker.launch(arrayOf("*/*")) }
                 )
             }
         }
@@ -313,9 +335,12 @@ private fun EditorScreen(
     additionalVideoUris: List<Uri>,
     audioUri: Uri?,
     audioName: String?,
+    captionCues: List<CaptionCue>,
+    captionFileName: String?,
     onBack: () -> Unit,
     onAddVideo: () -> Unit,
-    onAddAudio: () -> Unit
+    onAddAudio: () -> Unit,
+    onAddCaptions: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
